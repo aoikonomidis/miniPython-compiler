@@ -1,0 +1,182 @@
+Package minipython;
+
+Helpers
+	digit = ['0' .. '9'];
+	letter = ['a' .. 'z']|['A' .. 'Z']; 
+	cr = 13; 
+	lf = 10;
+	all = [0..127]; 
+	eol = lf | cr | cr lf ;
+	not_eol = [all - [cr + lf]]; 
+	single_ears = 39;
+	double_ears = 34;
+	underscore = 95;
+	blank = (' ' | lf | cr);
+
+Tokens
+	tab = 9;
+	minus_eq = '-=';
+	div_eq = '/=';
+	aug = '++';
+	dec = '--';
+	not_eq = '!=';
+	eq_comp = '==';
+	plus = '+';
+	minus = '-';
+	mult = '*';
+	div = '/';
+	eq = '=';
+	def = 'def';
+	l_par = '(';
+	r_par = ')';
+	l_br = '[';
+	r_br = ']';
+	comma=',';
+	if = 'if';
+	while = 'while';
+	for = 'for';
+	print = 'print';
+	return = 'return';
+	less = '<';
+	great = '>';
+	true = 'true';
+	semi = ':';
+	false = 'false';
+	in = 'in';
+	line_comment = '#' not_eol* eol; 
+	integer_literal = digit+;
+	number = digit+ | (digit+ '.' digit+);
+	identifier = letter (letter | digit | underscore)*;
+	string_literal =  double_ears (letter  | blank | digit)*  double_ears |	single_ears (letter | blank | digit)* single_ears;
+	blank = (' ' | lf | cr);
+
+Ignored Tokens
+	blank, line_comment;
+	
+Productions
+
+	goal = goal1* {-> New goal([goal1]) };
+
+	goal1 = {function} def identifier l_par argument? r_par semi statement {->New  goal1.funct(identifier, [argument], statement)} |
+			{statement} statement {->New goal1.stat(statement)};
+
+	argument = {argument} identifier eq_value? comma_identifier_eq_value* {->New argument(identifier, [eq_value.value], [comma_identifier_eq_value.id_value])};
+	
+	eq_value{->value} = {eq_value} eq value{->value};
+	
+	comma_identifier_eq_value{->id_value} = {comma_identifier_eq_value} comma identifier eq_value? {->New id_value(identifier, [eq_value.value])};
+	
+	statement ={if}tab* if  comparison semi statement{->New statement.if(comparison,statement)} |
+		   {while}tab*  while comparison semi statement{->New statement.while(comparison,statement)} |
+		   {for}tab* for [id1]:identifier in [id2]:identifier semi statement{->New statement.for(id1,id2,statement)}|
+		   {return}tab* return expression {->New statement.return(expression)}  |
+		   {print}tab* print expression comma_expression* {->New statement.print(expression,[comma_expression.expression])}|
+		   {assignment}tab* identifier assignment  {->New statement.assignment(identifier, assignment.expression)} |
+		   {table} tab* identifier l_br [l_expr]:expression r_br eq [r_expr]:expression {->New statement.table(identifier,l_expr,r_expr)} |
+		   {function_call}tab* function_call {->New statement.function_call(function_call)};
+
+	comma_expression{-> expression} = {comma_expression} comma expression{->expression};
+		   
+	assignment{->expression} = {equality} eq expression {->expression}	|
+				 {minus_equality} minus_eq expression {->expression}	|
+				 {div_equality} div_eq expression	{->expression};
+	
+	expression = {add_sub} add_sub {-> add_sub.expression};
+
+	
+				
+	add_sub{-> expression} = {mult_div} mult_div {-> mult_div.expression} |
+				{addition} add_sub plus mult_div {->New expression.add(add_sub.expression,mult_div.expression)} |
+				{subtraction} add_sub minus mult_div {->New expression.sub (add_sub.expression,mult_div.expression)};
+	
+	mult_div{-> expression} = {pre_fix} pre_fix {->pre_fix.expression}|
+				{multiplication} mult_div mult pre_fix {->New expression.mul(mult_div.expression, pre_fix.expression)}|
+				{division} mult_div div pre_fix  {->New expression.div(mult_div.expression, pre_fix.expression)};
+				
+	pre_fix{->expression} =   {id_val_par} id_val_par {->id_val_par.expression} |
+				{pre_aug} aug id_table  {->id_table.expression} |
+				{pre_dec} dec id_table  {->id_table.expression} |
+				{post_aug} id_table aug {->id_table.expression} |
+				{post_dec} id_table dec {->id_table.expression};
+				
+	id_table{->expression} =  {identifier} identifier{->New expression.identifier(identifier)} |
+				{table} identifier l_br expression r_br{->New expression.array(identifier,expression)};	
+
+	id_val_par{->expression} = {func_table_mtable} func_table_mtable{->func_table_mtable.expression} |
+				 {identifier} identifier {->New expression.identifier(identifier)} |
+				 {value} value {->New expression.value(value)}|
+				 {parenth_expr} l_par expression r_par{->expression};
+
+	func_table_mtable{->expression} = {function_call} function_call {->New expression.function_call(function_call)}|
+				{table} identifier l_br expression r_br {->New expression.array(identifier,expression)}|
+				{multidimmentional_table} l_br value comma_value* r_br {->New expression.args(value, [comma_value.value] )};		
+	
+	comma_value{->value} = 	{comma_value} comma value {->value};
+	
+	comparison{->comparison} = {less_greater_bool} less_greater_bool{->less_greater_bool.comparison} |
+				 {equals} [lpar]:expression eq_comp [rpar]:expression {->New comparison.eq(lpar.expression, rpar.expression)}|
+				 {n_equals} [lpar]:expression not_eq [rpar]:expression  {->New comparison.neq(lpar.expression, rpar.expression)};
+	
+	less_greater_bool{->comparison} = {less} [lpar]:expression less [rpar]:expression  {->New comparison.less(lpar, rpar)}|
+				   {great} [lpar]:expression great [rpar]:expression  {->New comparison.gre(lpar.expression, rpar.expression)}|
+				   {true} true{->New comparison.true(Null)}|
+				   {false} false{->New comparison.false(Null)};
+	
+	function_call = {function_call} identifier l_par arg_list? r_par{->New function_call(identifier,[arg_list])};
+	
+	arg_list = {arg_list} expression comma_expression*{->New arg_list(expression,[comma_expression.expression])};
+	
+	value = {integer_literal} integer_literal {->New value.integer_literal(integer_literal)}|
+			{string_value} string_literal {->New value.string_value(string_literal)};
+
+	
+
+Abstract Syntax Tree
+	
+	goal = goal1 * ;
+
+	goal1 = {funct} identifier argument*  statement |
+			{stat} statement ;
+
+	argument = identifier value* id_value*;
+	
+	id_value = identifier value* ;
+
+	statement ={if}   comparison  statement |
+		   {while}   comparison  statement |
+		   {for}  [id1]:identifier  [id2]:identifier  statement  |
+		   {return}  expression   |
+		   {print}  [e1]:expression [e2]:expression* |
+		   {assignment} identifier expression   |
+		   {table}  identifier [l]:expression [r]:expression |
+		   {function_call} function_call;
+
+	expression = {add} [l]:expression [r]:expression |
+				{sub} [l]:expression [r]:expression |
+				{mul} [l]:expression [r]:expression |
+				{div} [l]:expression [r]:expression |
+				{increment} expression |
+				{decrement} expression |
+				{array} identifier expression |
+				{function_call} function_call |
+				{value} value |
+				{identifier} identifier |
+				{par} expression |
+				{args} [l]:value [r]:value*;
+
+	comparison = {gre} [lexp]:expression [rexpr]:expression |
+				{less} [lexp]:expression [rexpr]:expression |
+				{neq} [lexp]:expression [rexpr]:expression |
+				{eq} [lexp]:expression [rexpr]:expression |
+				{true} true |
+				{false} false ;
+
+	function_call = identifier arg_list* ;
+
+	arg_list = [l]:expression [r]:expression*;
+
+	value = {integer_literal} integer_literal  |
+			{string_value} string_literal ;
+	 
+
+	 
